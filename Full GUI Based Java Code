@@ -1,0 +1,229 @@
+import javafx.application.Application;
+import javafx.stage.Stage;
+import javafx.scene.Scene;
+import javafx.scene.control.*;
+import javafx.scene.layout.*;
+import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.collections.*;
+import javafx.geometry.*;
+import javafx.scene.text.Text;
+import javafx.scene.control.Alert.AlertType;
+import javafx.scene.control.Label;
+import javafx.beans.property.ReadOnlyStringWrapper;
+
+public class FraudDetectionSystem extends Application {
+
+    private Stage primaryStage;
+    private Scene mainScene, adminScene, userSelectScene, userScene;
+    private ObservableList<Transaction> transactions;
+    private double threshold = 1000.0;
+    private TextField thresholdField;
+    private TableView<Transaction> adminTable;
+    private TableView<Transaction> userTable;
+
+    public static void main(String[] args) {
+        launch(args);
+    }
+
+    @Override
+    public void start(Stage stage) {
+        primaryStage = stage;
+        primaryStage.setTitle("AI-powered Fraud Detection System");
+
+        // Initialize mock transactions
+        transactions = FXCollections.observableArrayList();
+        populateTransactions();
+
+        // Create main menu scene
+        VBox mainLayout = new VBox(20);
+        mainLayout.setPadding(new Insets(20));
+        mainLayout.setAlignment(Pos.CENTER);
+
+        Text welcomeText = new Text("Welcome to Fraud Detection System");
+        Button adminButton = new Button("Admin");
+        Button userButton = new Button("User");
+        mainLayout.getChildren().addAll(welcomeText, adminButton, userButton);
+
+        mainScene = new Scene(mainLayout, 400, 300);
+
+        // Admin scene
+        adminTable = new TableView<>();
+        TableColumn<Transaction, String> idCol = new TableColumn<>("ID");
+        idCol.setCellValueFactory(new PropertyValueFactory<>("id"));
+        TableColumn<Transaction, String> userCol = new TableColumn<>("User");
+        userCol.setCellValueFactory(new PropertyValueFactory<>("user"));
+        TableColumn<Transaction, Double> amountCol = new TableColumn<>("Amount");
+        amountCol.setCellValueFactory(new PropertyValueFactory<>("amount"));
+        TableColumn<Transaction, String> statusCol = new TableColumn<>("Status");
+        statusCol.setCellValueFactory(cellData -> {
+            if (cellData.getValue().isFlagged()) {
+                return new ReadOnlyStringWrapper("Suspicious");
+            } else {
+                return new ReadOnlyStringWrapper("Clear");
+            }
+        });
+        adminTable.getColumns().addAll(idCol, userCol, amountCol, statusCol);
+        adminTable.setItems(transactions);
+
+        thresholdField = new TextField(String.valueOf(threshold));
+        thresholdField.setPrefWidth(100);
+        Button setThresholdButton = new Button("Set Threshold");
+        HBox thresholdBox = new HBox(10, new Label("Threshold:"), thresholdField, setThresholdButton);
+        thresholdBox.setAlignment(Pos.CENTER_LEFT);
+        Button adminBackButton = new Button("Main Menu");
+        VBox adminLayout = new VBox(10, thresholdBox, adminTable, adminBackButton);
+        adminLayout.setPadding(new Insets(10));
+        adminScene = new Scene(adminLayout, 600, 400);
+
+        // User selection scene
+        VBox userSelectLayout = new VBox(10);
+        userSelectLayout.setPadding(new Insets(20));
+        userSelectLayout.setAlignment(Pos.CENTER);
+        Text userSelectText = new Text("Select User:");
+        ComboBox<String> userComboBox = new ComboBox<>();
+        // populate user names from transactions
+        for (Transaction t : transactions) {
+            if (!userComboBox.getItems().contains(t.getUser())) {
+                userComboBox.getItems().add(t.getUser());
+            }
+        }
+        Button userSelectButton = new Button("View Transactions");
+        Button userSelectBackButton = new Button("Main Menu");
+        userSelectLayout.getChildren().addAll(userSelectText, userComboBox, userSelectButton, userSelectBackButton);
+        userSelectScene = new Scene(userSelectLayout, 400, 300);
+
+        // User scene
+        userTable = new TableView<>();
+        TableColumn<Transaction, String> uIdCol = new TableColumn<>("ID");
+        uIdCol.setCellValueFactory(new PropertyValueFactory<>("id"));
+        TableColumn<Transaction, Double> uAmountCol = new TableColumn<>("Amount");
+        uAmountCol.setCellValueFactory(new PropertyValueFactory<>("amount"));
+        TableColumn<Transaction, String> uStatusCol = new TableColumn<>("Status");
+        uStatusCol.setCellValueFactory(cellData -> {
+            if (cellData.getValue().isFlagged()) {
+                return new ReadOnlyStringWrapper("Suspicious");
+            } else {
+                return new ReadOnlyStringWrapper("Clear");
+            }
+        });
+        userTable.getColumns().addAll(uIdCol, uAmountCol, uStatusCol);
+        Button userBackButton = new Button("Main Menu");
+        VBox userLayout = new VBox(10, userTable, userBackButton);
+        userLayout.setPadding(new Insets(10));
+        userScene = new Scene(userLayout, 600, 400);
+
+        // Button actions
+        adminButton.setOnAction(e -> {
+            primaryStage.setScene(adminScene);
+            updateFlaggedTransactions();
+        });
+        userButton.setOnAction(e -> {
+            primaryStage.setScene(userSelectScene);
+        });
+        adminBackButton.setOnAction(e -> primaryStage.setScene(mainScene));
+        userSelectBackButton.setOnAction(e -> primaryStage.setScene(mainScene));
+        userBackButton.setOnAction(e -> primaryStage.setScene(mainScene));
+
+        setThresholdButton.setOnAction(e -> {
+            try {
+                double newThreshold = Double.parseDouble(thresholdField.getText());
+                threshold = newThreshold;
+                updateFlaggedTransactions();
+            } catch (NumberFormatException ex) {
+                Alert alert = new Alert(AlertType.ERROR, "Invalid threshold value");
+                alert.showAndWait();
+            }
+        });
+
+        userSelectButton.setOnAction(e -> {
+            String selectedUser = userComboBox.getValue();
+            if (selectedUser == null) {
+                Alert alert = new Alert(AlertType.ERROR, "Please select a user");
+                alert.showAndWait();
+            } else {
+                showUserTransactions(selectedUser);
+                primaryStage.setScene(userScene);
+            }
+        });
+
+        // Initialize flagged based on default threshold
+        updateFlaggedTransactions();
+
+        primaryStage.setScene(mainScene);
+        primaryStage.show();
+    }
+
+    private void populateTransactions() {
+        transactions.add(new Transaction("T1", "Alice", 500));
+        transactions.add(new Transaction("T2", "Bob", 1500));
+        transactions.add(new Transaction("T3", "Alice", 2000));
+        transactions.add(new Transaction("T4", "Charlie", 300));
+        transactions.add(new Transaction("T5", "Bob", 750));
+        transactions.add(new Transaction("T6", "Alice", 1250));
+    }
+
+    private void updateFlaggedTransactions() {
+        for (Transaction t : transactions) {
+            t.setFlagged(t.getAmount() > threshold);
+        }
+        if (adminTable != null) {
+            adminTable.refresh();
+        }
+        if (userTable != null) {
+            userTable.refresh();
+        }
+    }
+
+    private void showUserTransactions(String user) {
+        ObservableList<Transaction> userTransactions = FXCollections.observableArrayList();
+        for (Transaction t : transactions) {
+            if (t.getUser().equals(user)) {
+                userTransactions.add(t);
+            }
+        }
+        userTable.setItems(userTransactions);
+
+        // Show alert if any transaction is flagged
+        StringBuilder sb = new StringBuilder();
+        for (Transaction t : userTransactions) {
+            if (t.isFlagged()) {
+                sb.append("Transaction ").append(t.getId()).append(" is suspicious.\n");
+            }
+        }
+        if (sb.length() > 0) {
+            Alert alert = new Alert(AlertType.WARNING, sb.toString());
+            alert.setHeaderText("Suspicious Transactions Detected");
+            alert.showAndWait();
+        }
+    }
+
+    public static class Transaction {
+        private final String id;
+        private final String user;
+        private final double amount;
+        private boolean flagged;
+
+        public Transaction(String id, String user, double amount) {
+            this.id = id;
+            this.user = user;
+            this.amount = amount;
+            this.flagged = false;
+        }
+
+        public String getId() {
+            return id;
+        }
+        public String getUser() {
+            return user;
+        }
+        public double getAmount() {
+            return amount;
+        }
+        public boolean isFlagged() {
+            return flagged;
+        }
+        public void setFlagged(boolean flagged) {
+            this.flagged = flagged;
+        }
+    }
+}
